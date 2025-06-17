@@ -1,47 +1,81 @@
 pipeline {
     agent any
 
-        environment {
-        IMAGE_TAG = "${BUILD_NUMBER}"
+    environment {
+        GIT_REPO = 'https://github.com/betawins/hiring-app.git'
+        SONARQUBE_SERVER = 'SonarQube'         // Name as defined in Jenkins Global Tool Config
+        MAVEN_HOME = tool 'Maven 3.8.7'         // Match tool name in Jenkins
+        NEXUS_URL = 'http://your-nexus-url:8081'
+        NEXUS_REPO = 'maven-releases'
+        ARTIFACT_NAME = 'hiring-app'
+        SLACK_CHANNEL = '#ci-cd'
+        DEPLOY_PATH = '/var/lib/tomcat9/webapps/'
     }
 
     stages {
-        
-       
-        stage('Docker Build') {
+
+        stage('Clone Repository') {
             steps {
-                sh "docker build . -t sabair0509/hiring-app:$BUILD_NUMBER"
+                git url: "${env.GIT_REPO}", branch: 'main'
             }
         }
-        stage('Docker Push') {
+
+        stage('SonarQube Analysis') {
+            environment {
+                SONAR_SCANNER_HOME = tool 'sonar-scanner'
+            }
             steps {
-                withCredentials([string(credentialsId: 'docker-hub', variable: 'hubPwd')]) {
-                    sh "docker login -u sabair0509 -p ${hubPwd}"
-                    sh "docker push sabair0509/hiring-app:$BUILD_NUMBER"
+                withSonarQubeEnv("${SONARQUBE_SERVER}") {
+                    sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectKey=${ARTIFACT_NAME} -Dsonar.sources=."
                 }
             }
         }
-        stage('Checkout K8S manifest SCM'){
+
+        stage('Build with Maven') {
             steps {
-              git branch: 'main', url: 'https://github.com/betawins/Hiring-app-argocd.git'
+                sh "${MAVEN_HOME}/bin/mvn clean package"
             }
-        } 
-        stage('Update K8S manifest & push to Repo'){
-            steps {
-                script{
-                   withCredentials([usernamePassword(credentialsId: 'Github_server', passwordVariable: 'GIT_PASSWORD', usernameVariable: 'GIT_USERNAME')]) { 
-                        sh '''
-                        cat /var/lib/jenkins/workspace/$JOB_NAME/dev/deployment.yaml
-                        sed -i "s/5/${BUILD_NUMBER}/g" /var/lib/jenkins/workspace/$JOB_NAME/dev/deployment.yaml
-                        cat /var/lib/jenkins/workspace/$JOB_NAME/dev/deployment.yaml
-                        git add .
-                        git commit -m 'Updated the deploy yaml | Jenkins Pipeline'
-                        git remote -v
-                        git push https://$GIT_USERNAME:$GIT_PASSWORD@github.com/betawins/Hiring-app-argocd.git main
-                        '''                        
-                      }
-                  }
-            }   
         }
+
+        stage('Upload to Nexus') {
+            steps {
+                nexusArtifactUploader(
+                    nexusVersion: 'nexus3',
+                    protocol: 'http',
+                    nexusUrl: "${NEXUS_URL}",
+                    groupId: 'com.hiring',
+                    version: '1.0.0',
+                    repository: "${NEXUS_REPO}",
+                    credentialsId: 'nexus-credentials-id', // Jenkins credentials
+                    artifacts: [
+                        [artifactId: "${ARTIFACT_NAME}", classifier: '', file: "target/${ARTIFACT_NAME}.war", type: 'war']
+                    ]
+                )
             }
-} 
+        }
+
+        stage('Notify Slack') {
+            steps {
+                slackSend channel: "${SLACK_CHANNEL}", message: "Build and Upload completed for ${ARTIFACT_NAME}"
+            }
+        }
+
+        stage('Deploy to Tomcat') {
+            steps {
+                sh """
+                sudo cp target/${ARTIFACT_NAME}.war ${DEPLOY_PATH}
+                sudo systemctl restart tomcat9
+                """
+            }
+        }
+    }
+
+    post {
+        success {
+            slackSend channel: "${SLACK_CHANNEL}", message: "✅ Pipeline succeeded for ${ARTIFACT_NAME}"
+        }
+        failure {
+            slackSend channel: "${SLACK_CHANNEL}", message: "❌ Pipeline failed for ${ARTIFACT_NAME}"
+        }
+    }
+}
