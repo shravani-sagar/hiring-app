@@ -18,7 +18,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git 'https://github.com/shravani-sagar/hiring-app.git'
+                git branch: 'main', url: 'https://github.com/shravani-sagar/hiring-app.git'
             }
         }
 
