@@ -2,86 +2,77 @@ pipeline {
     agent any
 
     environment {
-        SONARQUBE_ENV = 'sonarqube' // Jenkins -> Manage Jenkins -> Configure -> SonarQube
-        NEXUS_REPO = 'maven-releases'
-        SLACK_CHANNEL = '#build-notifications'
-    }
-
-    tools {
-        jdk 'jdk 21'
-        maven 'Maven_3.9.4'
+        MAVEN_HOME = tool 'Maven_3.9.4'
+        JAVA_HOME = tool 'jdk21'
+        PATH = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${env.PATH}"
+        SONAR_SCANNER_HOME = "/opt/sonar-scanner"
+        SONAR_HOST_URL = "http://<SONAR-IP>:9000"
+        SONAR_LOGIN = credentials('sonar-token')
+        NEXUS_URL = "http://<NEXUS-IP>:8082/repository/maven-snapshot05/"
+        NEXUS_CREDENTIAL_ID = "nexus-creds"
+        TOMCAT_HOST = "http://<TOMCAT-HOST>:8080"
+        TOMCAT_USER = "admin"
+        TOMCAT_PASS = "admin"
     }
 
     stages {
-        stage('Checkout Code') {
+        stage('Checkout') {
             steps {
-                git url: 'https://github.com/shravani-sagar/hiring-app.git', branch: 'main'
+                git 'https://github.com/shravani-sagar/hiring-app.git'
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('SonarQube Scan') {
             steps {
-                withSonarQubeEnv("${SONARQUBE_ENV}") {
-                    sh 'mvn clean verify sonar:sonar'
+                withSonarQubeEnv('MySonar') {
+                    sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectKey=hiring-app -Dsonar.sources=src -Dsonar.java.binaries=target"
                 }
             }
         }
 
-        stage('Build with Maven') {
+        stage('Maven Build') {
             steps {
-                sh 'mvn clean package'
+                sh "mvn clean package"
             }
         }
 
-        stage('Upload Artifact to Nexus') {
+        stage('Upload to Nexus') {
             steps {
                 nexusArtifactUploader(
                     nexusVersion: 'nexus3',
                     protocol: 'http',
-                    nexusUrl: 'http://<NEXUS_IP>:8081',
+                    nexusUrl: '<NEXUS-IP>:8082',
                     groupId: 'com.hiringapp',
                     version: '1.0',
-                    repository: "${NEXUS_REPO}",
-                    credentialsId: 'nexus-creds-id',
-                    artifacts: [[
-                        artifactId: 'hiring-app',
-                        classifier: '',
-                        file: 'target/hiring-app.war',
-                        type: 'war'
-                    ]]
+                    repository: 'maven-snapshot05',
+                    credentialsId: "${NEXUS_CREDENTIAL_ID}",
+                    artifacts: [
+                        [artifactId: 'hiring-app', classifier: '', file: 'target/hiring-app.war', type: 'war']
+                    ]
                 )
             }
         }
 
         stage('Deploy to Tomcat') {
             steps {
-                sshPublisher(
-                    publishers: [
-                        sshPublisherDesc(
-                            configName: 'TomcatServer',
-                            transfers: [
-                                sshTransfer(
-                                    sourceFiles: 'target/hiring-app.war',
-                                    remoteDirectory: '/opt/tomcat/webapps',
-                                    removePrefix: 'target',
-                                    execCommand: 'sudo systemctl restart tomcat'
-                                )
-                            ],
-                            usePromotionTimestamp: false,
-                            verbose: true
-                        )
-                    ]
-                )
+                script {
+                    sh """
+                    curl -u ${TOMCAT_USER}:${TOMCAT_PASS} --upload-file target/hiring-app.war ${TOMCAT_HOST}/manager/text/deploy?path=/hiring-app&update=true
+                    """
+                }
+            }
+        }
+
+        stage('Slack Notification') {
+            steps {
+                slackSend(channel: '#ci-cd', message: "Build & Deployment of hiring-app completed successfully.")
             }
         }
     }
 
     post {
-        success {
-            slackSend(channel: "${SLACK_CHANNEL}", message: "✅ Build & Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
-        }
         failure {
-            slackSend(channel: "${SLACK_CHANNEL}", message: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
+            slackSend(channel: '#ci-cd', message: "Build FAILED for hiring-app!")
         }
     }
 }
