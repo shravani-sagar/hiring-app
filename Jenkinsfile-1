@@ -47,7 +47,7 @@ pipeline {
                     repository: 'maven-snapshot05',
                     credentialsId: "${NEXUS_CREDENTIAL_ID}",
                     artifacts: [
-                        [artifactId: 'hiring-app', classifier: '', file: 'target/hiring-app.war', type: 'war']
+                        [artifactId: 'hiring-app', classifier: '', file: 'target/hiring.war', type: 'war']
                     ]
                 )
             }
