@@ -8,7 +8,8 @@ pipeline {
         SONAR_SCANNER_HOME = "/opt/sonar-scanner"
         SONAR_HOST_URL = "http://3.94.54.123:9000"
         SONAR_LOGIN = credentials('sonar-token')
-        NEXUS_URL = "http://13.221.78.204:8081:8082/repository/maven-snapshot05/"
+        NEXUS_URL = "http://13.221.78.204:8081"
+        NEXUS_REPO = "maven-snapshot05"
         NEXUS_CREDENTIAL_ID = "nexus-creds"
         TOMCAT_HOST = "http://3.93.188.200:8080"
         TOMCAT_USER = "admin"
@@ -41,11 +42,11 @@ pipeline {
                 nexusArtifactUploader(
                     nexusVersion: 'nexus3',
                     protocol: 'http',
-                    nexusUrl: 'http://13.221.78.204:8081',
+                    nexusUrl: "${NEXUS_URL}",
                     groupId: 'com.hiringapp',
                     version: '1.0',
-                    repository: 'maven-snapshot05',
-                    credentialsId: 'nexus-creds',
+                    repository: "${NEXUS_REPO}",
+                    credentialsId: "${NEXUS_CREDENTIAL_ID}",
                     artifacts: [
                         [artifactId: 'hiring-app', classifier: '', file: 'target/hiring.war', type: 'war']
                     ]
@@ -65,19 +66,22 @@ pipeline {
 
         stage('Slack Notification') {
             steps {
-                slackSend(channel: '#ci-cd', message: "Build & Deployment of hiring-app completed successfully.",
-                tokenCredentialId: '58a2084b-edbc-43c6-9a76-7d30a3342d71'
-            )
-                
-}
+                slackSend(
+                    channel: '#ci-cd',
+                    message: "✅ Build & Deployment of hiring-app completed successfully.",
+                    tokenCredentialId: '58a2084b-edbc-43c6-9a76-7d30a3342d71'
+                )
+            }
         }
     }
 
     post {
         failure {
-            slackSend(channel: '#ci-cd', message: "Build FAILED for hiring-app!",
-            tokenCredentialId: '58a2084b-edbc-43c6-9a76-7d30a3342d71'
-        )
+            slackSend(
+                channel: '#ci-cd',
+                message: "❌ Build FAILED for hiring-app!",
+                tokenCredentialId: '58a2084b-edbc-43c6-9a76-7d30a3342d71'
+            )
         }
     }
 }
