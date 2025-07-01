@@ -41,7 +41,7 @@ pipeline {
                 nexusArtifactUploader(
                     nexusVersion: 'nexus3',
                     protocol: 'http',
-                    nexusUrl: '<NEXUS-IP>:8082',
+                    nexusUrl: 'http://13.221.78.204:8081',
                     groupId: 'com.hiringapp',
                     version: '1.0',
                     repository: 'maven-snapshot05',
