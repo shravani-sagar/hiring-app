@@ -1,0 +1,119 @@
+pipeline {
+    agent any
+
+    environment {
+        MAVEN_HOME = tool 'Maven_3.9.4'
+        SONAR_SCANNER_HOME = "/opt/sonar-scanner"
+        SONAR_HOST_URL = "http://3.94.54.123:9000"
+        NEXUS_URL = "http://13.221.78.204:8081/#browse/browse:maven-snapshot"
+        TOMCAT_HOST = "13.221.78.204"
+        TOMCAT_PORT = "8080"
+        TOMCAT_WEBAPPS_DIR = "/opt/tomcat/webapps"
+    }
+
+    stages {
+        stage('Checkout Code') {
+            steps {
+                git branch: 'main', url: 'https://github.com/shravani-sagar/hiring-app.git'
+            }
+        }
+
+        stage('SonarQube Analysis') {
+            steps {
+                withSonarQubeEnv('sonarqube') {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
+                        sh """
+                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \\
+                            -Dsonar.projectKey=hiring-app \\
+                            -Dsonar.sources=src \\
+                            -Dsonar.java.binaries=target/classes \\
+                            -Dsonar.host.url=${SONAR_HOST_URL} \\
+                            -Dsonar.login=${SONAR_TOKEN}
+                        """
+                    }
+                }
+            }
+        }
+
+        stage('Maven Build') {
+            steps {
+                sh "${MAVEN_HOME}/bin/mvn clean package -DskipTests"
+            }
+        }
+
+        stage('Upload WAR to Nexus Snapshot') {
+            when {
+                expression { return env.NEXUS_URL.contains("snapshot") }
+            }
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                    writeFile file: 'settings.xml', text: """
+                        <settings>
+                          <servers>
+                            <server>
+                              <id>nexus-snapshot</id>
+                              <username>${NEXUS_USER}</username>
+                              <password>${NEXUS_PASS}</password>
+                            </server>
+                          </servers>
+                        </settings>
+                    """
+                    sh """
+                        ${MAVEN_HOME}/bin/mvn deploy:deploy-file \\
+                          -DgroupId=in.javahome \\
+                          -DartifactId=hiring \\
+                          -Dversion=0.1-SNAPSHOT \\
+                          -Dpackaging=war \\
+                          -Dfile=target/hiring.war \\
+                          -DrepositoryId=nexus-snapshot \\
+                          -Durl=${NEXUS_URL} \\
+                          -DgeneratePom=true \\
+                          --settings settings.xml
+                    """
+                }
+            }
+        }
+
+        stage('Deploy WAR to Tomcat') {
+            steps {
+                withCredentials([usernamePassword(credentialsId: 'tomcat-token', usernameVariable: 'TOMCAT_USER', passwordVariable: 'TOMCAT_PASS')]) {
+                    sh """
+                        curl -u ${TOMCAT_USER}:${TOMCAT_PASS} \\
+                        --upload-file target/hiring.war \\
+                        http://${TOMCAT_HOST}:${TOMCAT_PORT}/manager/text/deploy?path=/hiring&update=true
+                    """
+                }
+            }
+        }
+
+        stage('Slack Notify') {
+            steps {
+                withCredentials([string(credentialsId: 'slack-token', variable: 'SLACK_TOKEN')]) {
+                    sh '''
+                        curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
+                             -H "Content-type: application/json" \
+                             --data '{"channel":"C04ABC123XY","text":"*Build Successful* - hiring-app deployed to Tomcat!"}' \
+                             https://slack.com/api/chat.postMessage
+                    '''
+                }
+            }
+        }
+    }
+
+    post {
+        success {
+            echo 'Pipeline finished successfully.'
+        }
+        failure {
+            echo 'Pipeline failed.'
+            withCredentials([string(credentialsId: 'slack-token', variable: 'SLACK_TOKEN')]) {
+                sh '''
+                    curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
+                         -H "Content-type: application/json" \
+                         --data '{"channel":"C04ABC123XY","text":" *Build Failed* - hiring-app"}' \
+                         https://slack.com/api/chat.postMessage
+                '''
+            }
+        }
+    }
+}
