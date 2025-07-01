@@ -2,97 +2,86 @@ pipeline {
     agent any
 
     environment {
-        MAVEN_HOME = tool 'Maven_3.9.4'
-        SONAR_SCANNER_HOME = "/opt/sonar-scanner"
-        SONAR_HOST_URL = "http://3.94.54.123:9000"
-        NEXUS_URL = "http://34.201.219.251:8082/repository/maven-snapshot05/"
-        TOMCAT_HOST = "13.221.78.204"
-        TOMCAT_PORT = "8080"
-        TOMCAT_WEBAPPS_DIR = "/opt/tomcat/webapps"
+        SONARQUBE_ENV = 'sonarqube' // Jenkins -> Manage Jenkins -> Configure -> SonarQube
+        NEXUS_REPO = 'maven-releases'
+        SLACK_CHANNEL = '#build-notifications'
+    }
+
+    tools {
+        jdk 'jdk21'
+        maven 'Maven_3.9.4'
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/shravani-sagar/hiring-app.git'
+                git url: 'https://github.com/shravani-sagar/hiring-app.git', branch: 'main'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                withSonarQubeEnv('sonar') {
-                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
-                        sh """
-                            ${SONAR_SCANNER_HOME}/bin/sonar-scanner \\
-                            -Dsonar.projectKey=hiring-app \\
-                            -Dsonar.sources=src \\
-                            -Dsonar.java.binaries=target/classes \\
-                            -Dsonar.host.url=${SONAR_HOST_URL} \\
-                            -Dsonar.login=${SONAR_TOKEN}
-                        """
-                    }
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
+                    sh 'mvn clean verify sonar:sonar'
                 }
             }
         }
 
-        stage('Maven Build') {
+        stage('Build with Maven') {
             steps {
-                sh "${MAVEN_HOME}/bin/mvn clean package -DskipTests"
+                sh 'mvn clean package'
             }
         }
 
-        stage('Upload WAR to Nexus Snapshot') {
-            when {
-                expression { return env.NEXUS_URL.contains("snapshot") }
-            }
+        stage('Upload Artifact to Nexus') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
-                    writeFile file: 'settings.xml', text: """
-                        <settings>
-                          <servers>
-                            <server>
-                              <id>nexus-snapshot</id>
-                              <username>${NEXUS_USER}</username>
-                              <password>${NEXUS_PASS}</password>
-                            </server>
-                          </servers>
-                        </settings>
-                    """
-                    sh """
-                        ${MAVEN_HOME}/bin/mvn deploy:deploy-file \\
-                          -DgroupId=in.javahome \\
-                          -DartifactId=hiring \\
-                          -Dversion=0.1-SNAPSHOT \\
-                          -Dpackaging=war \\
-                          -Dfile=target/hiring.war \\
-                          -DrepositoryId=nexus-snapshot \\
-                          -Durl=${NEXUS_URL} \\
-                          -DgeneratePom=true \\
-                          --settings settings.xml
-                    """
-                }
+                nexusArtifactUploader(
+                    nexusVersion: 'nexus3',
+                    protocol: 'http',
+                    nexusUrl: 'http://<NEXUS_IP>:8081',
+                    groupId: 'com.hiringapp',
+                    version: '1.0',
+                    repository: "${NEXUS_REPO}",
+                    credentialsId: 'nexus-creds-id',
+                    artifacts: [[
+                        artifactId: 'hiring-app',
+                        classifier: '',
+                        file: 'target/hiring-app.war',
+                        type: 'war'
+                    ]]
+                )
             }
         }
 
-        stage('Deploy WAR to Tomcat') {
+        stage('Deploy to Tomcat') {
             steps {
-                withCredentials([usernamePassword(credentialsId: 'tomcat-token', usernameVariable: 'TOMCAT_USER', passwordVariable: 'TOMCAT_PASS')]) {
-                    sh """
-                        curl -u ${TOMCAT_USER}:${TOMCAT_PASS} \\
-                        --upload-file target/hiring.war \\
-                        http://${TOMCAT_HOST}:${TOMCAT_PORT}/manager/text/deploy?path=/hiring&update=true
-                    """
-                }
+                sshPublisher(
+                    publishers: [
+                        sshPublisherDesc(
+                            configName: 'TomcatServer',
+                            transfers: [
+                                sshTransfer(
+                                    sourceFiles: 'target/hiring-app.war',
+                                    remoteDirectory: '/opt/tomcat/webapps',
+                                    removePrefix: 'target',
+                                    execCommand: 'sudo systemctl restart tomcat'
+                                )
+                            ],
+                            usePromotionTimestamp: false,
+                            verbose: true
+                        )
+                    ]
+                )
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline finished successfully.'
+            slackSend(channel: "${SLACK_CHANNEL}", message: "✅ Build & Deployment Successful: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
         failure {
-            echo '❌ Pipeline failed.'
+            slackSend(channel: "${SLACK_CHANNEL}", message: "❌ Build Failed: ${env.JOB_NAME} #${env.BUILD_NUMBER}")
         }
     }
 }
