@@ -4,7 +4,7 @@ pipeline {
     environment {
         MAVEN_HOME = tool 'Maven_3.9.4'
         SONAR_SCANNER_HOME = "/opt/sonar-scanner"
-        SONAR_HOST_URL = "http:3.94.54.123:9000"
+        SONAR_HOST_URL = "http://3.94.54.123:9000"
         NEXUS_URL = "http://34.201.219.251:8082/repository/maven-snapshot05/"
         TOMCAT_HOST = "13.221.78.204"
         TOMCAT_PORT = "8080"
@@ -85,35 +85,14 @@ pipeline {
                 }
             }
         }
-
-        stage('Slack Notify') {
-            steps {
-                withCredentials([string(credentialsId: 'slack-token', variable: 'SLACK_TOKEN')]) {
-                    sh '''
-                        curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
-                             -H "Content-type: application/json" \
-                             --data '{"channel":"C04ABC123XY","text":"*Build Successful* - hiring-app deployed to Tomcat!"}' \
-                             https://slack.com/api/chat.postMessage
-                    '''
-                }
-            }
-        }
     }
 
     post {
         success {
-            echo 'Pipeline finished successfully.'
+            echo '✅ Pipeline finished successfully.'
         }
         failure {
-            echo 'Pipeline failed.'
-            withCredentials([string(credentialsId: 'slack-token', variable: 'SLACK_TOKEN')]) {
-                sh '''
-                    curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
-                         -H "Content-type: application/json" \
-                         --data '{"channel":"C04ABC123XY","text":" *Build Failed* - hiring-app"}' \
-                         https://slack.com/api/chat.postMessage
-                '''
-            }
+            echo '❌ Pipeline failed.'
         }
     }
 }
