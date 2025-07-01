@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         MAVEN_HOME = tool 'Maven_3.9.4'
-        JAVA_HOME = tool 'jdk21'
+        JAVA_HOME = tool 'jdk 21'
         PATH = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${env.PATH}"
         SONAR_SCANNER_HOME = "/opt/sonar-scanner"
         SONAR_HOST_URL = "http://<SONAR-IP>:9000"
@@ -65,14 +65,19 @@ pipeline {
 
         stage('Slack Notification') {
             steps {
-                slackSend(channel: '#ci-cd', message: "Build & Deployment of hiring-app completed successfully.")
-            }
+                slackSend(channel: '#ci-cd', message: "Build & Deployment of hiring-app completed successfully.",
+                tokenCredentialId: 'slack-token'
+            )
+                
+}
         }
     }
 
     post {
         failure {
-            slackSend(channel: '#ci-cd', message: "Build FAILED for hiring-app!")
+            slackSend(channel: '#ci-cd', message: "Build FAILED for hiring-app!",
+            tokenCredentialId: 'slack-token'
+        )
         }
     }
 }
