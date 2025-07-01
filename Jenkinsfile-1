@@ -44,7 +44,7 @@ pipeline {
                     protocol: 'http',
                     nexusUrl: "${NEXUS_URL}",
                     groupId: 'com.hiringapp',
-                    version: '1.0',
+                    version: '1.0-SNAPSHOT',
                     repository: "${NEXUS_REPO}",
                     credentialsId: "${NEXUS_CREDENTIAL_ID}",
                     artifacts: [
