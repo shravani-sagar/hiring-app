@@ -3,7 +3,7 @@ pipeline {
 
     environment {
         MAVEN_HOME = tool 'Maven_3.9.4'
-        JAVA_HOME = tool 'jdk 21'
+        JAVA_HOME = tool 'JDK 21'
         PATH = "${JAVA_HOME}/bin:${MAVEN_HOME}/bin:${env.PATH}"
         SONAR_SCANNER_HOME = "/opt/sonar-scanner"
         SONAR_HOST_URL = "http://3.94.54.123:9000"
