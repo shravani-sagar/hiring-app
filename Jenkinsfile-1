@@ -3,25 +3,25 @@ pipeline {
 
     environment {
         MAVEN_HOME = tool 'Maven_3.9.4'
-        SONAR_SCANNER_HOME = "/opt/sonar_scanner"
-        SONAR_HOST_URL = "http://54.91.71.202:9000"
+        SONAR_SCANNER_HOME = "/opt/sonar-scanner"
+        SONAR_HOST_URL = "http:3.94.54.123:9000"
         NEXUS_URL = "http://34.201.219.251:8082/repository/maven-snapshot05/"
-        TOMCAT_HOST = "3.88.54.126"
-        TOMCAT_PORT = "8443"
+        TOMCAT_HOST = "13.221.78.204"
+        TOMCAT_PORT = "8080"
         TOMCAT_WEBAPPS_DIR = "/opt/tomcat/webapps"
     }
 
     stages {
         stage('Checkout Code') {
             steps {
-                git branch: 'main', url: 'https://github.com/sripriya7-ande/hiring-app.git'
+                git branch: 'main', url: 'https://github.com/shravani-sagar/hiring-app.git'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonar') {
-                    withCredentials([string(credentialsId: 'sonar-new', variable: 'SONAR_TOKEN')]) {
+                    withCredentials([string(credentialsId: 'sonar-token', variable: 'SONAR_TOKEN')]) {
                         sh """
                             ${SONAR_SCANNER_HOME}/bin/sonar-scanner \\
                             -Dsonar.projectKey=hiring-app \\
@@ -46,7 +46,7 @@ pipeline {
                 expression { return env.NEXUS_URL.contains("snapshot") }
             }
             steps {
-                withCredentials([usernamePassword(credentialsId: 'Nexus_server', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
+                withCredentials([usernamePassword(credentialsId: 'nexus-creds', usernameVariable: 'NEXUS_USER', passwordVariable: 'NEXUS_PASS')]) {
                     writeFile file: 'settings.xml', text: """
                         <settings>
                           <servers>
@@ -88,7 +88,7 @@ pipeline {
 
         stage('Slack Notify') {
             steps {
-                withCredentials([string(credentialsId: 'slack_token', variable: 'SLACK_TOKEN')]) {
+                withCredentials([string(credentialsId: 'slack-token', variable: 'SLACK_TOKEN')]) {
                     sh '''
                         curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
                              -H "Content-type: application/json" \
@@ -106,7 +106,7 @@ pipeline {
         }
         failure {
             echo 'Pipeline failed.'
-            withCredentials([string(credentialsId: 'slack_token', variable: 'SLACK_TOKEN')]) {
+            withCredentials([string(credentialsId: 'slack-token', variable: 'SLACK_TOKEN')]) {
                 sh '''
                     curl -X POST -H "Authorization: Bearer $SLACK_TOKEN" \
                          -H "Content-type: application/json" \
