@@ -24,7 +24,7 @@ pipeline {
 
         stage('SonarQube Scan') {
             steps {
-                withSonarQubeEnv('MySonar') {
+                withSonarQubeEnv('sonarqube') {
                     sh "${SONAR_SCANNER_HOME}/bin/sonar-scanner -Dsonar.projectKey=hiring-app -Dsonar.sources=src -Dsonar.java.binaries=target"
                 }
             }
