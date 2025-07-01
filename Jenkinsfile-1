@@ -8,7 +8,7 @@ pipeline {
         SONAR_SCANNER_HOME = "/opt/sonar-scanner"
         SONAR_HOST_URL = "http://3.94.54.123:9000"
         SONAR_LOGIN = credentials('sonar-token')
-        NEXUS_URL = "http://13.221.78.204:8081"
+        NEXUS_URL = "13.221.78.204:8081"
         NEXUS_REPO = "maven-snapshot05"
         NEXUS_CREDENTIAL_ID = "nexus-creds"
         TOMCAT_HOST = "http://3.93.188.200:8080"
